@@ -7,22 +7,31 @@ import regtricks as rt
 import numpy as np
 import nibabel as nib
 import os, ntpath
+from nilearn import datasets
 
-
-def project(fsdir, ref, output, src, tf_mat=None, save_proj=True, load=False):
+def project(fsdir, ref, output, src, tf_mat=None, surf, hemi, save_proj=True, load=False, lprojector, rprojector):
     logger = logging.getLogger("Toberone")
     logger.info("Loading surfaces of reference image for both left and right Hemisphere(pial and white).")
+    '''
+    if hemi == 'left':
+        hs='lh'
+    elif hemi == 'right':
+        hs='rh'
+    else:
+        logger.info("Hemisphere does not exists.")
+    '''
     LWS = os.path.join(fsdir, 'surf/lh.white')
     LPS = os.path.join(fsdir, 'surf/lh.pial')
     RWS = os.path.join(fsdir, 'surf/rh.white')
     RPS = os.path.join(fsdir, 'surf/rh.pial')
-    lhemi = tob.Hemisphere(LWS, LPS, side='L')
-    rhemi = tob.Hemisphere(RWS, RPS, side='R')
+    if hemi == 'left':
+        lhemi = tob.Hemisphere(LWS, LPS, side='L')
+    else:
+        rhemi = tob.Hemisphere(RWS, RPS, side='R')
 
-    spc = rt.ImageSpace(ref)
+    lprojector_path, rprojector_path = lprojector, rprojector
 
-    lprojector_path = os.path.join(output, 'lprojector.h5')
-    rprojector_path = os.path.join(output, 'rprojector.h5')
+    t1_spc = rt.ImageSpace(ref)
 
     if load == True and os.path.exists(rprojector_path) and os.path.exists(lprojector_path):
         logger.info("Load local projectors")
@@ -30,12 +39,12 @@ def project(fsdir, ref, output, src, tf_mat=None, save_proj=True, load=False):
         rproj = tob.Projector.load(rprojector_path)
     else:
         logger.info("Ccomputing projectors")
-        lproj = tob.Projector(lhemi, spc)
-        rproj = tob.Projector(rhemi, spc)
+        lproj = tob.Projector(lhemi, t1_spc)
+        rproj = tob.Projector(rhemi, t1_spc)
 
     if save_proj:
-        lproj.save(os.path.join(output, 'lprojector.h5'))
-        rproj.save(os.path.join(output, 'rprojector.h5'))
+        lproj.save(os.path.join(output, f'{surf}_left_projector.h5'))
+        rproj.save(os.path.join(output, f'{surf}_right_projector.h5'))
         logger.info("Projectos saved.")
 
     if tf_mat != None:
@@ -49,11 +58,14 @@ def project(fsdir, ref, output, src, tf_mat=None, save_proj=True, load=False):
 
     lvol_on_surf = lproj.vol2surf(asl_in_t1.flatten(), edge_scale=False)
     rvol_on_surf = rproj.vol2surf(asl_in_t1.flatten(), edge_scale=False)
-    logger.info("Use WM surface to display metric files.")
-    lsurf = tob.Surface(LWS)
-    rsurf = tob.Surface(RWS)
-    lsurf.save_metric(lvol_on_surf, os.path.join(output, prefix + '_surf_on_lws.func.gii'))
-    rsurf.save_metric(rvol_on_surf, os.path.join(output, prefix + '_surf_on_rws.func.gii'))
+
+
+    logger.info("Use fsaverage mesh to display metric files.")
+    fsaverage = datasets.fetch_surf_fsaverage()
+    lsurf = tob.Surface(fsaverage[f'{surf}_left'])
+    rsurf = tob.Surface(fsaverage[f'{surf}_right'])
+    lsurf.save_metric(lvol_on_surf, os.path.join(output, prefix + f'_surf_on_{surf}_left.func.gii'))
+    rsurf.save_metric(rvol_on_surf, os.path.join(output, prefix + f'_surf_on_{surf}_right.func.gii'))
     logger.info("Metric files saved.")
 
 
@@ -95,6 +107,18 @@ def main():
     )
 
     parser.add_argument(
+        "--hemi",
+        help="The hemisphere which the projection based on",
+        required=False
+    )
+
+    parser.add_argument(
+        "--surf",
+        help="Projection for which surface(pial/white)",
+        required=True
+    )
+
+    parser.add_argument(
         "--asl2str",
         help="Path to the transformation matrix from native space to structural space",
         required=False
@@ -115,10 +139,12 @@ def main():
     output = args.output
     Path(output).mkdir(exist_ok=True)
     prefix = ntpath.basename(src).split('.')[0]
-
+    surf = args.surf
+    hemi = args.hemi
     logger = setup_logger("Toberone", os.path.join(output, prefix+'_tob_proj.log'), "INFO", args.verbose)
     logger.info(args)
-    project(fsdir=fs_dir, ref=ref, output=output, src=src, tf_mat=asl2str, save_proj=True, load=False)
+
+    project(fsdir=fs_dir, ref=ref, output=output, src=src, tf_mat=asl2str, save_proj=True, load=False, surf=surf, hemi=hemi)
 
     pass
 
