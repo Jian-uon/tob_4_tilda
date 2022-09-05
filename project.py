@@ -9,9 +9,9 @@ import nibabel as nib
 import os, ntpath
 from nilearn import datasets
 
-def project(fsdir, ref, output, src, tf_mat=None, surf, hemi, save_proj=True, load=False, lprojector, rprojector):
+def project(fsdir, ref, output, src, surf, hemi, tf_mat, save_proj=True, load=True, projector=None):
     logger = logging.getLogger("Toberone")
-    logger.info("Loading surfaces of reference image for both left and right Hemisphere(pial and white).")
+    logger.info("Loading surfaces of reference image for {} {}.".format(surf, hemi))
     '''
     if hemi == 'left':
         hs='lh'
@@ -20,53 +20,55 @@ def project(fsdir, ref, output, src, tf_mat=None, surf, hemi, save_proj=True, lo
     else:
         logger.info("Hemisphere does not exists.")
     '''
-    LWS = os.path.join(fsdir, 'surf/lh.white')
-    LPS = os.path.join(fsdir, 'surf/lh.pial')
-    RWS = os.path.join(fsdir, 'surf/rh.white')
-    RPS = os.path.join(fsdir, 'surf/rh.pial')
+    LWS = os.path.join(fsdir, 'surf', 'lh.white')
+    LPS = os.path.join(fsdir, 'surf', 'lh.pial')
+    RWS = os.path.join(fsdir, 'surf', 'rh.white')
+    RPS = os.path.join(fsdir, 'surf', 'rh.pial')
     if hemi == 'left':
-        lhemi = tob.Hemisphere(LWS, LPS, side='L')
+        raw_hemi = tob.Hemisphere(LWS, LPS, side='L')
+    elif hemi == 'right':
+        raw_hemi = tob.Hemisphere(RWS, RPS, side='R')
     else:
-        rhemi = tob.Hemisphere(RWS, RPS, side='R')
+        logger.info("Hemisphere does not exist.")
 
-    lprojector_path, rprojector_path = lprojector, rprojector
+    #projector = "{}_{}_projector.h5".format(surf, hemi)
+    projector_path = projector
 
     t1_spc = rt.ImageSpace(ref)
 
-    if load == True and os.path.exists(rprojector_path) and os.path.exists(lprojector_path):
-        logger.info("Load local projectors")
-        lproj = tob.Projector.load(lprojector_path)
-        rproj = tob.Projector.load(rprojector_path)
+    if load == True and projector != None and os.path.exists(projector_path):
+        logger.info("Load local projectors {}".format(projector_path))
+        proj = tob.Projector.load(projector_path)
     else:
         logger.info("Ccomputing projectors")
-        lproj = tob.Projector(lhemi, t1_spc)
-        rproj = tob.Projector(rhemi, t1_spc)
+        proj = tob.Projector(raw_hemi, t1_spc)
 
-    if save_proj:
-        lproj.save(os.path.join(output, f'{surf}_left_projector.h5'))
-        rproj.save(os.path.join(output, f'{surf}_right_projector.h5'))
-        logger.info("Projectos saved.")
-
+    if  projector != None and os.path.exists(projector_path) and save_proj:
+        out_path = os.path.join(output, "{}_{}_projector.h5".format(surf, hemi))
+        proj.save(out_path)
+        logger.info("Projectors saved.")
+    
     if tf_mat != None:
         logger.info("Transforming asl image from native space to structural space.")
-        asl_in_t1 = register(src=src, ref=ref, tf_mat=asl2struct)
+        asl2str_reg = rt.Registration.from_flirt(tf_mat, src=src, ref=ref)
+        asl_in_t1 = asl2str_reg.apply_to_image(src, ref=ref).get_fdata()
+
+        #asl_in_t1 = register_to_t1(src=src, ref=ref, tf_mat=tf_mat)
     else:
         logger.info("ASL image is regarded in the structural space.")
+        #To do: specify native space for ASL image
         asl_in_t1 = nib.load(src).get_fdata()
 
     prefix = ntpath.basename(src).split('.')[0]
-
-    lvol_on_surf = lproj.vol2surf(asl_in_t1.flatten(), edge_scale=False)
-    rvol_on_surf = rproj.vol2surf(asl_in_t1.flatten(), edge_scale=False)
+    print(proj)
+    vol_on_surf = proj.vol2surf(vdata=asl_in_t1.flatten(), edge_scale=False)
 
 
     logger.info("Use fsaverage mesh to display metric files.")
     fsaverage = datasets.fetch_surf_fsaverage()
-    lsurf = tob.Surface(fsaverage[f'{surf}_left'])
-    rsurf = tob.Surface(fsaverage[f'{surf}_right'])
-    lsurf.save_metric(lvol_on_surf, os.path.join(output, prefix + f'_surf_on_{surf}_left.func.gii'))
-    rsurf.save_metric(rvol_on_surf, os.path.join(output, prefix + f'_surf_on_{surf}_right.func.gii'))
-    logger.info("Metric files saved.")
+    surf = tob.Surface(fsaverage["{}_{}".format(surf, hemi)])
+    surf.save_metric(vol_on_surf, os.path.join(output, prefix + "_surf_on_{}_{}.func.gii".format(surf, hemi)))
+    logger.info("Metric file({} {}) on fsaverage saved.".format(surf, hemi))
 
 
     #surf_in_vol = proj.surf2vol(vol_on_surf, edge_scale=False)
@@ -125,6 +127,12 @@ def main():
     )
 
     parser.add_argument(
+        "--projector",
+        help="projector",
+        required=False
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         help="If this option is provided, stdout will go to the terminal "
             +"as well as to a logfile. Default is False.",
@@ -136,6 +144,7 @@ def main():
     ref=args.ref
     src=args.src
     asl2str=args.asl2str
+    projector=args.projector
     output = args.output
     Path(output).mkdir(exist_ok=True)
     prefix = ntpath.basename(src).split('.')[0]
@@ -144,7 +153,7 @@ def main():
     logger = setup_logger("Toberone", os.path.join(output, prefix+'_tob_proj.log'), "INFO", args.verbose)
     logger.info(args)
 
-    project(fsdir=fs_dir, ref=ref, output=output, src=src, tf_mat=asl2str, save_proj=True, load=False, surf=surf, hemi=hemi)
+    project(fsdir=fs_dir, ref=ref, output=output, src=src, tf_mat=asl2str, save_proj=True, load=True, surf=surf, hemi=hemi, projector = projector)
 
     pass
 
