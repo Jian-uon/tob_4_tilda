@@ -67,10 +67,10 @@ def project(fsdir, ref, output, src, tf_mat, save_proj=True, load=True, projecto
         midsurf = hemi.midsurface()
         print(len(midsurf.points))
         if side == 'L':
-            midsurf.save_metric(vol_on_surf[:len(midsurf.points)], os.path.join(output, prefix + "midsurf_{}.func.gii".format(side)))
+            midsurf.save_metric(vol_on_surf[:len(midsurf.points)], os.path.join(output, prefix + "_mid_{}.func.gii".format(side)))
         else:
             midsurf.save_metric(vol_on_surf[-len(midsurf.points):],
-                                os.path.join(output, prefix + "midsurf_{}.func.gii".format(side)))
+                                os.path.join(output, prefix + "_mid_{}.func.gii".format(side)))
 
         #print()
         print(side)
