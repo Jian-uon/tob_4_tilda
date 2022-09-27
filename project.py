@@ -52,14 +52,7 @@ def project(fsdir, ref, output, src, tf_mat, save_proj=True, load=True, projecto
 
     vol_on_surf = proj.vol2surf(vdata=asl_in_t1.flatten(), edge_scale=False)
 
-
-
     logger.info("Use fsaverage mesh to display metric files.")
-    #print(vol_on_surf.shape)
-    #l_surf = tob.Surface(LWS)
-    #print((l_surf.points))
-    #print(len(l_surf.points))
-
     vol_on_surf = proj.vol2surf(vdata=asl_in_t1.flatten(), edge_scale=False)
 
     for side, hemi in proj.hemi_dict.items():
@@ -73,22 +66,9 @@ def project(fsdir, ref, output, src, tf_mat, save_proj=True, load=True, projecto
                                 os.path.join(output, prefix + "_mid_{}.func.gii".format(side)))
 
         #print()
-        print(side)
-        print(midsurf)
+        #print(side)
+        #print(midsurf)
 
-
-    #l_midsurf = get_midthickness(L_hemi)[:len(L_hemi)/2]
-    #r_midsurf = get_midthickness(R_hemi)[len(L_hemi)/2:]
-    #print(type(l_midsurf))
-
-    #r_surf = tob.Surface(r_midsurf)
-    #l_midsurf.save_metric(vol_on_surf, os.path.join(output, prefix + "_surf_on_{}_{}.func.gii".format('mid', 'left')))
-    #r_midsurf.save_metric(vol_on_surf, os.path.join(output, prefix + "_surf_on_{}_{}.func.gii".format('mid', 'right')))
-    #logger.info("Metric file({} {}) on fsaverage saved.".format(surf, hemi))
-
-
-    #surf_in_vol = proj.surf2vol(vol_on_surf, edge_scale=False)
-    #spc.save_image(surf_in_vol, 'asl_surf_in_t1.nii.gz')
 
 def register_to_t1(src, ref, tf_mat):
     asl2str_reg = rt.Registration.from_flirt(tf_mat, src=src, ref=ref)
